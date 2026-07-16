@@ -15,9 +15,17 @@ export default defineConfig({
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
   },
-  webServer: {
-    command: 'npx http-server ../frontend -p 3000 --silent',
-    port: 3000,
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: [
+    {
+      command: 'cd .. && mvn spring-boot:run -q',
+      port: 8080,
+      timeout: 120000,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: 'npx http-server ../frontend -p 3000 --silent',
+      port: 3000,
+      reuseExistingServer: !process.env.CI,
+    },
+  ],
 });
