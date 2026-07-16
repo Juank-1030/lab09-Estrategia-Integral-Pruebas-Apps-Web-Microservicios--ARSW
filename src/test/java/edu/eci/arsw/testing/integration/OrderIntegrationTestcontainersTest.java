@@ -3,6 +3,7 @@ package edu.eci.arsw.testing.integration;
 import edu.eci.arsw.testing.dto.CreateOrderRequest;
 import edu.eci.arsw.testing.dto.OrderResponse;
 import edu.eci.arsw.testing.service.OrderService;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,6 +15,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@Tag("docker")
 @Testcontainers
 @SpringBootTest
 class OrderIntegrationTestcontainersTest {

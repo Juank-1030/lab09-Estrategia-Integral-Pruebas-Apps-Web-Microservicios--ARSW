@@ -37,7 +37,7 @@ jobs:
 
   frontend-tests:
     runs-on: ubuntu-latest
-    needs: backend-tests
+    if: always()
 
     steps:
       - uses: actions/checkout@v4
