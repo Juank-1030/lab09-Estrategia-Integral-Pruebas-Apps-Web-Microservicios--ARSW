@@ -3,6 +3,7 @@
 **Asignatura:** Arquitecturas de Software - ARSW  
 **Tecnologías:** Spring Boot, JUnit, Mockito, MockMvc, Testcontainers, Playwright, k6, GitHub Actions  
 **Duración:** 3 horas | **Modalidad:** Individual
+**Nombres:** Juan Bohorquez, Carlos Uribe
 
 ---
 
@@ -179,6 +180,34 @@ Usa `@SpringBootTest` con H2 en memoria — prueba real de servicio + repositori
 
 Usa `@Testcontainers` con PostgreSQL 15. Requiere Docker Desktop ejecutándose.
 
+### 10.1 Actividad 3 — Diferencia entre prueba unitaria, prueba con MockMvc y prueba de integración
+
+Después de implementar los tres tipos de prueba en este laboratorio, noto que cada una prueba algo distinto y tiene un costo distinto:
+
+**Prueba unitaria (`OrderServiceTest`):** aquí no se levanta nada de Spring, simplemente instancio `OrderService` a mano y le paso un `OrderRepository` simulado con Mockito. Esto hace que la prueba corra en milisegundos porque no hay contexto de aplicación ni conexión a base de datos de por medio. Lo que valida es la lógica pura del negocio: que rechace pedidos que superan el límite, que arme bien el objeto, etc. El problema es que como el repositorio está simulado, esta prueba no me dice nada sobre si el resto de la aplicación (controlador, base de datos) realmente funciona con este servicio.
+
+**Prueba de API con MockMvc (`OrderControllerTest`):** con `@WebMvcTest` solo se levanta la capa web del controlador, no toda la aplicación, así que sigue siendo bastante rápida (aunque un poco más lenta que la unitaria porque ya hay un contexto de Spring de por medio, aunque sea reducido). Aquí el `OrderService` está simulado con `@MockitoBean`, así que lo que realmente estoy probando es el contrato HTTP: que el endpoint responda con el código correcto, que el JSON tenga la forma esperada, que las validaciones con `@Valid` funcionen. La confianza que da es media, porque si el servicio de verdad tuviera un bug, esta prueba no lo detectaría (está simulado).
+
+**Prueba de integración (`OrderIntegrationTest`):** con `@SpringBootTest` se levanta todo: el contexto completo de Spring, el servicio real y la base de datos H2 real. Nada está simulado. Por eso es la más lenta de las tres (tarda segundos, no milisegundos), pero también la que más confianza da, porque se acerca mucho a lo que pasaría en producción: si el servicio, el repositorio y la base de datos no se están comunicando bien, esta prueba lo va a mostrar. El costo de mantenerla también es más alto: si cambio el esquema de la base de datos o la configuración de Spring, es la que más se puede romper, y hay que tener cuidado con dejar datos "sucios" entre pruebas.
+
+En resumen, para mí la relación es: entre más rápida es la prueba, menos confianza real da sobre el sistema completo, pero más barata es de mantener y más veces se puede correr (por eso las unitarias van en cada commit). Entre más lenta y "real" es la prueba, más cara es de mantener, pero también es la que más certeza da de que el sistema funciona como debería en producción (por eso las de integración se reservan para pull requests o antes de un release, y no se corren en cada commit).
+
+Para tenerlo más claro, resumí las tres pruebas en esta tabla:
+
+| | Unitaria (`OrderServiceTest`) | MockMvc (`OrderControllerTest`) | Integración (`OrderIntegrationTest`) |
+|---|---|---|---|
+| ¿Levanta Spring? | No | Solo la capa web (`@WebMvcTest`) | Sí, todo el contexto (`@SpringBootTest`) |
+| ¿Qué está simulado? | El repositorio (Mockito) | El servicio (`@MockitoBean`) | Nada, todo es real |
+| Tiempo aproximado | Milisegundos | Milisegundos-bajo | Segundos |
+| Qué prueba en verdad | La lógica de negocio | El contrato HTTP (status, JSON, validaciones) | Que servicio + repositorio + BD funcionen juntos |
+| Nivel de confianza | Bajo-medio | Medio | Alto |
+| Costo de mantenerla | Bajo | Medio | Alto |
+| ¿Cuándo la correría? | En cada commit | En cada commit o PR | En PR o antes de un release |
+
+Viendo la tabla es más fácil notar el patrón: a medida que subo de fila (de unitaria a integración) voy perdiendo velocidad pero gano confianza, y es exactamente el trade-off que menciona la guía cuando habla de la pirámide de pruebas: muchas pruebas rápidas en la base y pocas pruebas lentas y costosas en la punta.
+
+Una cosa que también noté haciendo esto: si solo hubiera dejado la prueba de MockMvc, pude haber tenido un `OrderService` con un bug real y aun así ver todos los tests en verde, porque el servicio estaba simulado. Eso fue lo que más me convenció de por qué no basta con un solo tipo de prueba y hay que combinar las tres.
+
 ---
 
 ## 11. Pruebas E2E de frontend con Playwright
@@ -287,17 +316,49 @@ mvn spring-boot:run
 # Terminal 2: Ejecutar k6
 k6 run load-tests/load-test.js
 ```
-
-**Métricas a interpretar:**
-| Métrica | Interpretación |
-|---|---|
-| http_req_duration | Tiempo de respuesta promedio |
-| p(95) | El 95% respondió por debajo de este valor |
-| http_req_failed | Porcentaje de errores |
-| throughput | Solicitudes por segundo |
-| checks | Validaciones pasadas/fallidas |
-
 ---
+
+### 12.1 Actividad 5 — Ejecución y resultados de la prueba de carga
+
+Para esta actividad tuve que instalar k6 primero con `winget install k6` (ya que no lo tenía), y como la terminal no reconocía el comando recién instalado, tuve que abrir una terminal nueva para que tomara el PATH actualizado.
+
+Con el backend corriendo (`mvn spring-boot:run`, levantado en el puerto 8080 con H2 en memoria) ejecuté en otra terminal:
+
+```bash
+k6 run load-tests/load-test.js
+```
+
+La prueba corrió durante 1m10.8s, simulando hasta 30 usuarios virtuales concurrentes en 3 etapas (subida a 10 VUs, subida a 30 VUs, bajada a 0), tal como está definido en el script.
+
+**Resultados obtenidos:**
+
+| Métrica | Valor |
+|---|---|
+| Usuarios virtuales máximos (VUs) | 30 |
+| Duración total | 1m10.8s (stages: 20s→10 VUs, 30s→30 VUs, 20s→0 VUs) |
+| Total de solicitudes (`http_reqs`) | 2010 (28.4 req/s) |
+| Porcentaje de fallos (`http_req_failed`) | 0.00% (0 de 2010) |
+| Latencia p95 (`http_req_duration`) | 4.69ms |
+| Threshold `http_req_failed: rate<0.05` |  cumplido (rate=0.00%) |
+| Threshold `http_req_duration: p(95)<800` |  cumplido (p95=4.69ms) |
+| Checks pasados | 4020/4020 (100.00%) |
+| Iteraciones completas | 1005 |
+
+**Evidencia:**
+
+![Instalación de k6](images/instalacionk6.png)
+
+*Instalación de k6 con winget y arranque del backend con `mvn spring-boot:run`, confirmando que Spring Boot quedó corriendo en el puerto 8080 con H2 en memoria.*
+
+![Resultado prueba de carga k6](images/k6test.png)
+
+*Resumen final de k6 tras ejecutar `load-test.js`: 2010 solicitudes HTTP, 0% de fallos, p95 de 4.69ms y los dos thresholds definidos (`p(95)<800` y `rate<0.05`) cumplidos.*
+
+**Conclusión técnica:**
+
+Con 30 usuarios virtuales concurrentes el sistema respondió muy por debajo de los límites que definí: un p95 de apenas 4.69ms frente al umbral de 800ms, y 0% de solicitudes fallidas frente al límite de 5% que configuré como threshold. Los 4020 checks (creación de pedido, duración, búsqueda por ID y duración del GET) pasaron al 100%, lo que confirma que tanto el POST /orders como el GET /orders/{id} se mantuvieron estables durante toda la prueba.
+
+Estos tiempos tan bajos (milisegundos) se explican en gran parte porque estoy usando H2 en memoria, que no tiene la latencia de red ni de disco de una base de datos real. Si quisiera una medición más cercana a un ambiente de producción, tendría que repetir esta prueba con Testcontainers y PostgreSQL, o subir considerablemente el número de usuarios virtuales (por ejemplo a 100 o 200) para encontrar el punto donde el sistema realmente empieza a degradarse, porque con 30 VUs el backend claramente todavía tiene mucho margen.
 
 ## 13. Pipeline CI/CD con GitHub Actions
 
