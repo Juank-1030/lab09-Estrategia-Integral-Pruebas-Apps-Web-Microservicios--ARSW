@@ -1,0 +1,4 @@
+edu\eci\arsw\testing\controller\OrderControllerTest.class
+edu\eci\arsw\testing\service\OrderServiceTest.class
+edu\eci\arsw\testing\integration\OrderIntegrationTest.class
+edu\eci\arsw\testing\integration\OrderIntegrationTestcontainersTest.class

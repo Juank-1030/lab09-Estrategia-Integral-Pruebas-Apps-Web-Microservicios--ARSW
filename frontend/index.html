@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orders App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5; padding: 2rem; }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 { margin-bottom: 1.5rem; color: #333; }
+    .card { background: #fff; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #555; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.9rem; font-weight: 500; margin-bottom: 0.25rem; color: #444; }
+    input { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+    button { padding: 0.5rem 1.5rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    .result { margin-top: 1rem; padding: 0.75rem; border-radius: 4px; font-size: 0.9rem; }
+    .result.success { background: #dcfce7; color: #166534; }
+    .result.error { background: #fef2f2; color: #991b1b; }
+    .result.info { background: #e0f2fe; color: #075985; }
+    pre { margin: 0; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Orders Management</h1>
+
+    <div class="card" id="create-order-section">
+      <h2>Crear Pedido</h2>
+      <div class="form-group">
+        <label for="customer-id">Customer ID</label>
+        <input data-testid="customer-id" id="customer-id" type="text" placeholder="ej: CUS-01">
+      </div>
+      <div class="form-group">
+        <label for="order-total">Total</label>
+        <input data-testid="order-total" id="order-total" type="number" placeholder="ej: 120000">
+      </div>
+      <button data-testid="create-order" id="create-order" onclick="createOrder()">Crear pedido</button>
+      <div id="create-result" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="card" id="search-order-section">
+      <h2>Consultar Pedido</h2>
+      <div class="form-group">
+        <label for="search-order-id">Order ID</label>
+        <input data-testid="search-order-id" id="search-order-id" type="text" placeholder="ej: ORD-123">
+      </div>
+      <button data-testid="search-order" id="search-order" onclick="findOrder()">Buscar</button>
+      <div id="search-result" class="result" style="display:none;"></div>
+    </div>
+
+    <div id="order-detail" data-testid="order-detail" style="display:none;"></div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:8080';
+
+    async function createOrder() {
+      const customerId = document.getElementById('customer-id').value.trim();
+      const total = parseFloat(document.getElementById('order-total').value);
+      const resultDiv = document.getElementById('create-result');
+      const detailDiv = document.getElementById('order-detail');
+
+      if (!customerId || isNaN(total)) {
+        resultDiv.className = 'result error';
+        resultDiv.innerHTML = '<pre data-testid="error-message">Complete todos los campos correctamente</pre>';
+        resultDiv.style.display = 'block';
+        detailDiv.style.display = 'none';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customerId, total })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          resultDiv.className = 'result error';
+          resultDiv.innerHTML = `<pre data-testid="error-message">Error: ${res.status} - ${errText}</pre>`;
+          resultDiv.style.display = 'block';
+          detailDiv.style.display = 'none';
+          return;
+        }
+
+        const order = await res.json();
+        resultDiv.className = 'result success';
+        resultDiv.innerHTML = `
+          <pre>
+ID: <span data-testid="order-id">${order.id}</span>
+Status: <span data-testid="order-status">${order.status}</span>
+Customer: ${order.customerId}
+Total: ${order.total}
+          </pre>`;
+        resultDiv.style.display = 'block';
+        detailDiv.style.display = 'none';
+      } catch (err) {
+        resultDiv.className = 'result error';
+        resultDiv.innerHTML = `<pre data-testid="error-message">Error de conexión: ${err.message}</pre>`;
+        resultDiv.style.display = 'block';
+        detailDiv.style.display = 'none';
+      }
+    }
+
+    async function findOrder() {
+      const id = document.getElementById('search-order-id').value.trim();
+      const resultDiv = document.getElementById('search-result');
+      const detailDiv = document.getElementById('order-detail');
+
+      if (!id) {
+        resultDiv.className = 'result error';
+        resultDiv.innerHTML = '<pre data-testid="error-message">Ingrese un ID de pedido</pre>';
+        resultDiv.style.display = 'block';
+        detailDiv.style.display = 'none';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/orders/${encodeURIComponent(id)}`);
+
+        if (!res.ok) {
+          resultDiv.className = 'result error';
+          resultDiv.innerHTML = `<pre data-testid="error-message">Error: ${res.status} - Pedido no encontrado</pre>`;
+          resultDiv.style.display = 'block';
+          detailDiv.style.display = 'none';
+          return;
+        }
+
+        const order = await res.json();
+        resultDiv.className = 'result info';
+        resultDiv.innerHTML = `<pre>Pedido encontrado</pre>`;
+        resultDiv.style.display = 'block';
+
+        detailDiv.className = 'card result info';
+        detailDiv.innerHTML = `
+          <pre>
+ID: ${order.id}
+Customer: ${order.customerId}
+Total: ${order.total}
+Status: ${order.status}
+Created: ${order.createdAt}
+          </pre>`;
+        detailDiv.style.display = 'block';
+      } catch (err) {
+        resultDiv.className = 'result error';
+        resultDiv.innerHTML = `<pre data-testid="error-message">Error de conexión: ${err.message}</pre>`;
+        resultDiv.style.display = 'block';
+        detailDiv.style.display = 'none';
+      }
+    }
+  </script>
+</body>
+</html>

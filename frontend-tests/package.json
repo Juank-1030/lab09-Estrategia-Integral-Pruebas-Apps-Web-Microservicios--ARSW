@@ -1,0 +1,12 @@
+{
+  "name": "frontend-tests",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "npx playwright test",
+    "show-report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "http-server": "^14.1.1"
+  }
+}
